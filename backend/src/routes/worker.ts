@@ -2,8 +2,6 @@ import { Router } from "express";
 
 const router = Router();
 
-router.post("/signin", (req, res) => {
-    res.send("Sign in");
-});
+router.post("/signin")
 
 export default router;

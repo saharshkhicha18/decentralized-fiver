@@ -21,7 +21,7 @@ model User {
 
 model Task {
   id          Int          @id @default(autoincrement())
-  title       String
+  title       String?
   // foreign key constraints
   options     Option[]
   user_id     Int
@@ -34,7 +34,6 @@ model Task {
 model Option {
   id         Int          @id @default(autoincrement())
   image_url  String
-  option_id  Int
   task_id    Int
   task       Task         @relation(fields: [task_id], references: [id])
   submission Submission[]
@@ -53,7 +52,7 @@ model Submission {
   worker_id Int
   worker    Worker @relation(fields: [worker_id], references: [id])
   option_id Int
-  options   Option @relation(fields: [option_id], references: [id])
+  option    Option @relation(fields: [option_id], references: [id])
   task_id   Int
   task      Task   @relation(fields: [task_id], references: [id])
   amount    String

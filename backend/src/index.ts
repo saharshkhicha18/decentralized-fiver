@@ -1,9 +1,34 @@
-import express from 'express';
-import userRouter from './routers/user';
-import workerRouter from './routers/worker';
-const app = express();
+import app from './app';
+import config from './config/config'
+import logger from "./config/Logger";
 
-app.use("/v1/user", userRouter),
-app.use("/v1/worker", workerRouter)
+const server = app.listen(config.port, () => {
+    logger.info(`Listening to port ${config.port}`);
+});
 
-app.listen(3000);
+const exitHandler = () => {
+    if (server) {
+        server.close(() => {
+            logger.info('Server closed');
+            process.exit(1);
+        });
+    } else {
+        process.exit(1);
+    }
+};
+
+const unexpectedErrorHandler = (error: Error) => {
+    logger.error(error);
+    console.log(error)
+    exitHandler();
+};
+
+process.on('uncaughtException', unexpectedErrorHandler);
+process.on('unhandledRejection', unexpectedErrorHandler);
+
+process.on('SIGTERM', () => {
+    logger.info('SIGTERM received');
+    if (server) {
+        server.close();
+    }
+});
