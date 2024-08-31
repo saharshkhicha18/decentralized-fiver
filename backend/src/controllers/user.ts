@@ -66,12 +66,13 @@ const createTask = catchAsync(async (req: Request, res: Response) => {
     }
 
     // parse the signature here to ensure the person has paid correct amount
+    console.log(config.totalDecimals)
 
     let response = await prismaClient.$transaction(async tx => {
         const response = await tx.task.create({
             data: {
                 title: parseData.data.title ?? DEFAULT_TITLE,
-                amount: "1",
+                amount: 1 * config.totalDecimals,
                 signature: parseData.data.signature,
                 user_id: userId
             }

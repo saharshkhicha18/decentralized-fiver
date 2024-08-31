@@ -6,5 +6,6 @@ export default {
   awsAccessKey: process.env.AWS_ACCESS_KEY!,
   awsSecretKey: process.env.AWS_SECRET_KEY!,
   db: process.env.DATABASE_URL!,
-  jwtSecret: process.env.JWT_SECRET!
+  jwtSecret: process.env.JWT_SECRET!,
+  totalDecimals: Number(process.env.TOTAL_DECIMALS)!
 };
