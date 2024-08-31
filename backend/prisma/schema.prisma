@@ -25,6 +25,7 @@ model Task {
   // foreign key constraints
   options     Option[]
   user_id     Int
+  done        Boolean      @default(false)
   signature   String
   amount      String
   user        User         @relation(fields: [user_id], references: [id])

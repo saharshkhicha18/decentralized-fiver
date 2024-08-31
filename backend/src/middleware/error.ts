@@ -41,11 +41,8 @@ export const errorHandler = (err: any, __: Request, res: Response, _: NextFuncti
   };
 
   if (config.env === 'development' || config.env === 'staging') {
-    console.log("H0")
     logger.error(err);
   }
-
-  console.log("Ho")
 
   res.status(statusCode).send(response);
 };

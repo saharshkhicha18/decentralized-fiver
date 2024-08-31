@@ -112,7 +112,7 @@ const getTask = catchAsync(async (req: Request, res: Response) => {
     if (!taskDetails) {
         throw new ApiError(httpStatus.BAD_REQUEST, "No such task")
     }
-    console.log("Hi")
+
     //TODO: can you make this faster
     const responses = await prismaClient.submission.findMany({
         where: {
