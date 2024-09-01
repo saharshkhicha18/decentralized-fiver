@@ -7,3 +7,8 @@ export const createTaskInput = z.object({
     title: z.string().optional(),
     signature: z.string()
 })
+
+export const createSignInInput = z.object({
+    publicKey: z.string(),
+    signature: z.any()
+})

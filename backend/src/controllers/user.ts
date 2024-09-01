@@ -3,24 +3,44 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import config from "../config/config"
 import S3Manager from "../utils/S3Manager";
-import { createTaskInput } from "../validations/user";
+import { createTaskInput, createSignInInput } from "../validations/user";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import catchAsync from "../utils/catchAsync";
-
-const prismaClient = new PrismaClient();
+import nacl from "tweetnacl";
+import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 
 const DEFAULT_TITLE = "Please select the most clickable thumbnail"
+const connection = new Connection(config.rpcUrl ?? "");
+const TREASURY_WALLET_ADDRESS = "3J8i5KzS3cPij7QtdgAmgDZg9hUSFwm9fnuRrHMa7MNi";
+
+const prismaClient = new PrismaClient();
 
 // signin with wallet
 // signing a message
 const signin = catchAsync(async (req: Request, res: Response) => {
-    //TODO: add sign verification logic here
-    const hardcodedWalletAddress = "0.0.1532012";
+    const body = req.body;
+    const parseData = createSignInInput.safeParse(body)
+
+    if (!parseData.success) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Something went wrong in signin")
+    }
+    const message = new TextEncoder().encode("Sign into dFiver!");
+
+    const result = nacl.sign.detached.verify(
+        message,
+        new Uint8Array(parseData.data.signature.data),
+        new PublicKey(parseData.data.publicKey).toBytes(),
+    );
+
+
+    if (!result) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Incorrect Signature")
+    }
 
     const existingUser = await prismaClient.user.findFirst({
         where: {
-            address: hardcodedWalletAddress
+            address: parseData.data.publicKey
         }
     })
 
@@ -29,11 +49,13 @@ const signin = catchAsync(async (req: Request, res: Response) => {
             userId: existingUser.id
         }, config.jwtSecret)
 
-        res.json({ token })
+        res.json({
+            token
+        })
     } else {
         const user = await prismaClient.user.create({
             data: {
-                address: hardcodedWalletAddress,
+                address: parseData.data.publicKey,
             }
         })
 
@@ -41,7 +63,9 @@ const signin = catchAsync(async (req: Request, res: Response) => {
             userId: user.id
         }, config.jwtSecret)
 
-        res.json({ token })
+        res.json({
+            token
+        })
     }
 })
 
@@ -61,12 +85,41 @@ const createTask = catchAsync(async (req: Request, res: Response) => {
 
     const parseData = createTaskInput.safeParse(body)
 
+    const user = await prismaClient.user.findFirst({
+        where: {
+            id: userId
+        }
+    })
+
     if (!parseData.success) {
         throw new ApiError(httpStatus.LENGTH_REQUIRED, "You have sent the wrong inputs")
     }
 
     // parse the signature here to ensure the person has paid correct amount
-    console.log(config.totalDecimals)
+    const transaction = await connection.getTransaction(parseData.data.signature, {
+        maxSupportedTransactionVersion: 1
+    });
+
+    console.log(connection, transaction);
+
+    if (!transaction) throw new ApiError(httpStatus.LENGTH_REQUIRED, "Transaction not found. Try in sometime")
+
+    // need a better way to verify here  --- parse the Bytes from the SystemProgram
+    if ((transaction?.meta?.postBalances[1] ?? 0) - (transaction?.meta?.preBalances[1] ?? 0) !== 100000000) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Transaction signature/amount incorrect")
+    }
+
+    if (transaction?.transaction.message.getAccountKeys().get(1)?.toString() !== TREASURY_WALLET_ADDRESS) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Transaction sent to wrong address")
+    }
+
+    if (transaction?.transaction.message.getAccountKeys().get(0)?.toString() !== user?.address) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Transaction sent from wrong address")
+    }
+    // was this money paid by this user address or a different address?
+
+    // parse the signature here to ensure the person has paid 0.1 SOL
+    // const transaction = Transaction.from(parseData.data.signature);
 
     let response = await prismaClient.$transaction(async tx => {
         const response = await tx.task.create({
