@@ -1,25 +1,46 @@
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
+import bs58 from "bs58";
 import jwt from "jsonwebtoken";
 import catchAsync from "../utils/catchAsync";
 import config from "../config/config";
 import ApiError from "../utils/ApiError";
 import httpStatus from "http-status";
 import { getNextTask } from "../service/worker";
-import { createSubmissionInput } from "../validations/worker";
+import { createSignInInput, createSubmissionInput } from "../validations/worker";
+import nacl from "tweetnacl";
+import { Connection, SystemProgram, PublicKey, Transaction, Keypair, sendAndConfirmTransaction } from "@solana/web3.js";
+import { privateKey } from '../privateKey';
 
 const MAX_TOTAL_SUBMISSIONS = 100;
+const connection = new Connection(config.rpcUrl ?? "");
 
 const prismaClient = new PrismaClient();
 const jwtSecretWorker = config.jwtSecret + "_worker";
 
 const signin = catchAsync(async (req: Request, res: Response) => {
-    //TODO: add sign verification logic here
-    const hardcodedWalletAddress = "0.0.23456";
+    const body = req.body;
+    const parseData = createSignInInput.safeParse(body)
+
+    if (!parseData.success) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Something went wrong in signin")
+    }
+    const message = new TextEncoder().encode("Sign into dFiver as a worker");
+
+    console.log(parseData)
+    const result = nacl.sign.detached.verify(
+        message,
+        new Uint8Array(parseData.data.signature.data),
+        new PublicKey(parseData.data.publicKey).toBytes(),
+    );
+
+    if (!result) {
+        throw new ApiError(httpStatus.LENGTH_REQUIRED, "Incorrect Signature")
+    }
 
     const existingUser = await prismaClient.worker.findFirst({
         where: {
-            address: hardcodedWalletAddress
+            address: parseData.data.publicKey
         }
     })
 
@@ -28,27 +49,34 @@ const signin = catchAsync(async (req: Request, res: Response) => {
             userId: existingUser.id
         }, jwtSecretWorker)
 
-        res.json({ token })
+        res.json({
+            token,
+            amount: existingUser.pending_amount / config.totalDecimals
+        })
     } else {
         const user = await prismaClient.worker.create({
             data: {
-                address: hardcodedWalletAddress,
+                address: parseData.data.publicKey,
                 pending_amount: 0,
                 locked_amount: 0
             }
-        })
+        });
 
         const token = jwt.sign({
             userId: user.id
         }, jwtSecretWorker)
 
-        res.json({ token })
+        res.json({
+            token,
+            amount: 0
+        })
     }
 })
 
 const nextTask = catchAsync(async (req: Request, res: Response) => {
     //@ts-ignore
     const userId: string = req.userId;
+    console.log(userId)
 
     const task = await getNextTask(Number(userId))
 
@@ -65,7 +93,9 @@ const submission = catchAsync(async (req: Request, res: Response) => {
     const parsedBody = createSubmissionInput.safeParse(body);
 
     if (parsedBody.success) {
+        console.log(userId)
         const task = await getNextTask(Number(userId))
+        console.log(task, parsedBody)
         if (! task || task.id !== Number(parsedBody.data.taskId)) {
             throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect task id");
         }
@@ -135,11 +165,35 @@ const payout = catchAsync(async(req: Request, res: Response) => {
         }
     })
     if (!worker) throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Worker not found")
-    
-    const address = worker.address
 
     // logic to create a tx
-    const txId = "0X1234"
+    const transaction = new Transaction().add(
+        SystemProgram.transfer({
+            toPubkey: new PublicKey(worker.address),
+            fromPubkey: new PublicKey("3J8i5KzS3cPij7QtdgAmgDZg9hUSFwm9fnuRrHMa7MNi"),
+            lamports: 1000_000_000 * worker.pending_amount / config.totalDecimals,
+        })
+    );
+
+    const keyPair = Keypair.fromSecretKey(bs58.decode(privateKey))
+
+    // TODO: There's a double spending problem here
+    // The user can request the withdrawal multiple times?
+    let signature = "";
+    try {
+        signature = await sendAndConfirmTransaction(
+            connection,
+            transaction,
+            [keyPair],
+        );
+    
+     } catch(e) {
+        return res.json({
+            message: "Transaction failed"
+        })
+     }
+
+     console.log(signature)
 
     // need to add a lock here
     await prismaClient.$transaction(async (tx) => {
@@ -162,7 +216,7 @@ const payout = catchAsync(async(req: Request, res: Response) => {
                 user_id: Number(userId),
                 amount: worker.pending_amount,
                 status: "Processing",
-                signature: txId
+                signature
             }
         })
     })

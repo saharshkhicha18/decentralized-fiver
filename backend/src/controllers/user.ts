@@ -125,7 +125,7 @@ const createTask = catchAsync(async (req: Request, res: Response) => {
         const response = await tx.task.create({
             data: {
                 title: parseData.data.title ?? DEFAULT_TITLE,
-                amount: 1 * config.totalDecimals,
+                amount: 0.1 * config.totalDecimals,
                 signature: parseData.data.signature,
                 user_id: userId
             }
