@@ -7,18 +7,17 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useEffect } from 'react';
 import axios from 'axios';
 import { BACKEND_URL } from '@/utils';
+import Link from 'next/link';
 
 export const Appbar = () => {
-    const { publicKey , signMessage} = useWallet();
+    const { connected, publicKey , signMessage} = useWallet();
 
     async function signAndSend() {
         if (!publicKey) {
             return;
         }
-        const message = new TextEncoder().encode("Sign into mechanical turks");
+        const message = new TextEncoder().encode("Sign into dFiver!");
         const signature = await signMessage?.(message);
-        console.log(signature)
-        console.log(publicKey)
         const response = await axios.post(`${BACKEND_URL}/v1/user/signin`, {
             signature,
             publicKey: publicKey?.toString()
@@ -29,14 +28,14 @@ export const Appbar = () => {
 
     useEffect(() => {
         signAndSend()
-    }, [publicKey]);
+    }, [connected])
 
     return <div className="flex justify-between border-b pb-2 pt-2">
         <div className="text-2xl pl-4 flex justify-center pt-3">
-            Turkify
+            <Link href="/">dFiver</Link>
         </div>
         <div className="text-xl pr-4 pb-2">
-            {publicKey  ? <WalletDisconnectButton /> : <WalletMultiButton />}
+            {connected  ? <WalletDisconnectButton onClick={() => localStorage.removeItem("token")}/> : <WalletMultiButton onClick={signAndSend}/>}
         </div>
     </div>
 }
