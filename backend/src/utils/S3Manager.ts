@@ -8,7 +8,7 @@ class S3Manager {
 
     bucketInfo = {
         Bucket: 'decentralized-fiver-app',
-        ContentType: 'img/jpg'
+        ContentType: 'image/*'
     }
 
     constructor() {
@@ -21,17 +21,17 @@ class S3Manager {
     }
 
     generateSignedURL(
-        userId: string,
-        imageName: string
+        userId: string
     ) {
         try {
-            const signedUrl = this.s3.getSignedUrl('putObject', {
+            const key = `fiver/${userId}/${Math.random()}/image`;
+            const preSignedUrl = this.s3.getSignedUrl('putObject', {
                 ...this.bucketInfo,
-                Key: `fiver/${userId}/${imageName}`,
+                Key: key,
                 Expires: 60 * 5
             })
 
-            return signedUrl
+            return { preSignedUrl, key }
         } catch(error: any) {
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `S3 bucket error: ${error.message}`);
         }

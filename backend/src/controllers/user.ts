@@ -49,8 +49,8 @@ const preSignedUrl = (req: Request, res: Response) => {
     //@ts-ignore
     const userId = req.userId
     const s3Manager = new S3Manager();
-    const preSignedUrl = s3Manager.generateSignedURL(userId, '1')
-    res.json(preSignedUrl)
+    const data = s3Manager.generateSignedURL(userId)
+    res.json(data)
 }
 
 const createTask = catchAsync(async (req: Request, res: Response) => {
@@ -95,10 +95,10 @@ const createTask = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getTask = catchAsync(async (req: Request, res: Response) => {
-    //@ts-ignore
-    const userId = req.userId;
-    //@ts-ignore
+    // @ts-ignore
     const taskId: string = req.query.taskId;
+    // @ts-ignore
+    const userId: string = req.userId;
 
     const taskDetails = await prismaClient.task.findFirst({
         where: {
@@ -111,21 +111,23 @@ const getTask = catchAsync(async (req: Request, res: Response) => {
     })
 
     if (!taskDetails) {
-        throw new ApiError(httpStatus.BAD_REQUEST, "No such task")
+        return res.status(411).json({
+            message: "You dont have access to this task"
+        })
     }
 
-    //TODO: can you make this faster
+    // Todo: Can u make this faster?
     const responses = await prismaClient.submission.findMany({
         where: {
             task_id: Number(taskId)
-        }, 
+        },
         include: {
             option: true
         }
-    })
+    });
 
     const result: Record<string, {
-        count: number,
+        count: number;
         option: {
             imageUrl: string
         }
@@ -139,11 +141,15 @@ const getTask = catchAsync(async (req: Request, res: Response) => {
             }
         }
     })
+
     responses.forEach(r => {
         result[r.option_id].count++;
-    })
+    });
 
-    res.json({result})
+    res.json({
+        result,
+        taskDetails
+    })
 })
 
 export default {
